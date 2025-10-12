@@ -74,7 +74,7 @@ async function extractAudio(input: string, output: string, kbps: number) {
 
 // ------------------- TikTok API -------------------
 app.get("/api/tiktok", async (req, res) => {
-  const { url, type = "video", quality = "720p", kbps = "192", json = "true" } =
+  const { url, type = "video", quality = "1080p", kbps = "192", json = "true" } =
     req.query as Record<string, string>;
   if (!url) return res.status(400).json({ error: "Missing TikTok URL." });
 
@@ -128,7 +128,7 @@ app.get("/api/tiktok", async (req, res) => {
       return res.status(413).json({ error: `File too large (${(stat.size/1024/1024).toFixed(1)} MB)` });
     }
 
-    CACHE[id] = { path: outPath, expire: Date.now() + 300_000 }; // 5 phút
+    CACHE[id] = { path: outPath, expire: Date.now() + 600_000 }; // 5 phút
     fileUrl = `/api/tmp/${id}`;
 
     // Trả JSON đầy đủ info + link download
@@ -143,7 +143,7 @@ app.get("/api/tiktok", async (req, res) => {
         images: info.images || [],
         size: `${(stat.size / 1024 / 1024).toFixed(2)} MB`,
         download: fileUrl,
-        expires: "300s"
+        expires: "600s"
       });
     } else {
       return res.redirect(fileUrl);
