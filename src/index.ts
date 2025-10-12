@@ -1,26 +1,20 @@
 import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
+import axios from "axios";
 import fs from "fs";
 import fsp from "fs/promises";
-import axios from "axios";
+import path from "path";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegPath from "ffmpeg-static";
 import { randomUUID } from "crypto";
 
 ffmpeg.setFfmpegPath(ffmpegPath!);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 const TMP_DIR = "/tmp";
 const CACHE: Record<string, { path: string; expire: number }> = {};
+
 const MAX_MB = 100;
 const MAX_FILE = MAX_MB * 1024 * 1024;
-
-// Serve static files (CSS, images)
-app.use(express.static(path.join(__dirname, "public")));
 
 // 🧹 Cleanup tmp dir on start
 try {
@@ -28,7 +22,6 @@ try {
   console.log("[Init] /tmp cleaned");
 } catch {}
 
-// Auto cleanup every 10s
 setInterval(() => {
   const now = Date.now();
   for (const id in CACHE) {
@@ -41,8 +34,10 @@ setInterval(() => {
 
 // ------------------- Token safe -------------------
 async function getToken(): Promise<string> {
+  // 1️⃣ Check environment first
   if (process.env.TIKWM_TOKEN) return process.env.TIKWM_TOKEN;
 
+  // 2️⃣ Fallback read token.json (local)
   try {
     const raw = await fsp.readFile(path.join(process.cwd(), "src", "token.json"), "utf-8");
     const data = JSON.parse(raw);
@@ -101,10 +96,10 @@ app.get("/api/tiktok", async (req, res) => {
     const base = path.join(TMP_DIR, `${safe}_${id}`);
 
     let outPath = "";
+    let fileUrl = "";
 
     if (type === "video") {
-      const videoUrl =
-        quality === "480p" ? info.play || info.download_addr : info.play || info.hdplay || info.download_addr;
+      const videoUrl = quality === "480p" ? info.play || info.download_addr : info.play || info.hdplay || info.download_addr;
       outPath = `${base}.mp4`;
       await downloadFile(videoUrl, outPath);
     } else if (type === "audio") {
@@ -130,13 +125,13 @@ app.get("/api/tiktok", async (req, res) => {
     const stat = fs.statSync(outPath);
     if (stat.size > MAX_FILE) {
       fs.unlink(outPath, () => {});
-      return res.status(413).json({ error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)} MB)` });
+      return res.status(413).json({ error: `File too large (${(stat.size/1024/1024).toFixed(1)} MB)` });
     }
 
     CACHE[id] = { path: outPath, expire: Date.now() + 300_000 }; // 5 phút
+    fileUrl = `/api/tmp/${id}`;
 
-    const fileUrl = `/api/tmp/${id}`;
-
+    // Trả JSON đầy đủ info + link download
     if (json === "true") {
       return res.json({
         success: true,
@@ -148,7 +143,7 @@ app.get("/api/tiktok", async (req, res) => {
         images: info.images || [],
         size: `${(stat.size / 1024 / 1024).toFixed(2)} MB`,
         download: fileUrl,
-        expires: "300s",
+        expires: "300s"
       });
     } else {
       return res.redirect(fileUrl);
@@ -170,57 +165,6 @@ app.get("/api/tmp/:id", (req, res) => {
       delete CACHE[id];
     }
   });
-});
-
-// ------------------- HTML Home -------------------
-app.get("/", (req, res) => {
-  res.type("html").send(`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8"/>
-        <title>TikTok Downloader</title>
-        <link rel="stylesheet" href="/style.css" />
-      </head>
-      <body>
-        <header>
-          <h1>TikTok Downloader 🚀</h1>
-        </header>
-        <main>
-          <form id="tiktokForm">
-            <input type="text" id="tiktokUrl" placeholder="Paste TikTok link..." required/>
-            <select id="typeSelect">
-              <option value="video">Video</option>
-              <option value="audio">Audio (MP3)</option>
-              <option value="image">Images (ZIP)</option>
-            </select>
-            <button type="submit">Download</button>
-          </form>
-          <div id="result"></div>
-        </main>
-        <script>
-          const form = document.getElementById('tiktokForm');
-          form.addEventListener('submit', async e => {
-            e.preventDefault();
-            const url = document.getElementById('tiktokUrl').value;
-            const type = document.getElementById('typeSelect').value;
-            const res = await fetch(\`/api/tiktok?url=\${encodeURIComponent(url)}&type=\${type}\`);
-            const data = await res.json();
-            if(data.success){
-              document.getElementById('result').innerHTML = \`
-                <p>Title: \${data.title}</p>
-                <p>Author: \${data.author}</p>
-                <p>Size: \${data.size}</p>
-                <a href="\${data.download}">Download Here</a>
-              \`;
-            }else{
-              document.getElementById('result').innerText = data.error || 'Failed';
-            }
-          });
-        </script>
-      </body>
-    </html>
-  `);
 });
 
 export default app;
