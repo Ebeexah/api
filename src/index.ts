@@ -13,7 +13,7 @@ const app = express();
 const TMP_DIR = "/tmp";
 const CACHE: Record<string, { path: string; expire: number }> = {};
 
-const MAX_MB = 100;
+const MAX_MB = 200;
 const MAX_FILE = MAX_MB * 1024 * 1024;
 
 // 🧹 Cleanup tmp dir on start
