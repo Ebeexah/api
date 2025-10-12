@@ -13,7 +13,7 @@ const app = express();
 const TMP_DIR = "/tmp";
 const CACHE: Record<string, { path: string; expire: number }> = {};
 
-const MAX_MB = 200;
+const MAX_MB = 150;
 const MAX_FILE = MAX_MB * 1024 * 1024;
 
 // 🧹 Cleanup tmp dir on start
@@ -128,7 +128,7 @@ app.get("/api/tiktok", async (req, res) => {
       return res.status(413).json({ error: `File too large (${(stat.size/1024/1024).toFixed(1)} MB)` });
     }
 
-    CACHE[id] = { path: outPath, expire: Date.now() + 600_000 }; // 5 phút
+    CACHE[id] = { path: outPath, expire: Date.now() + 300_000 }; // 5 phút
     fileUrl = `/api/tmp/${id}`;
 
     // Trả JSON đầy đủ info + link download
@@ -143,7 +143,7 @@ app.get("/api/tiktok", async (req, res) => {
         images: info.images || [],
         size: `${(stat.size / 1024 / 1024).toFixed(2)} MB`,
         download: fileUrl,
-        expires: "600s"
+        expires: "300s"
       });
     } else {
       return res.redirect(fileUrl);
