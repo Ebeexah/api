@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   const user = (req.query.user || "").replace("@", "");
   if (!user) return res.status(400).json({ error: "Missing user" });
 
-  const token = process.env.BL_TOKEN; // token Browserless
+  const token = process.env.BL_TOKEN;
   if (!token) return res.status(500).json({ error: "Missing BL_TOKEN" });
 
   const endpoint = "https://production-sfo.browserless.io/chromium/bql";
@@ -10,7 +10,6 @@ export default async function handler(req, res) {
   const start = Date.now();
 
   try {
-    // BrowserQL query để load TikTok + lấy content
     const query = `
       query CheckLive($url: String!) {
         goto(url: $url, waitUntil: networkidle2) { status }
@@ -21,15 +20,10 @@ export default async function handler(req, res) {
     const response = await fetch(`${endpoint}?token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        variables: { url: targetUrl },
-      }),
+      body: JSON.stringify({ query, variables: { url: targetUrl } }),
     });
 
     const data = await response.json();
-
-    // dữ liệu render đầy đủ HTML đã có chữ LIVE nếu đang phát
     const html = data?.data?.content || "";
     const isLive = html.includes(">LIVE<") || html.includes("LIVE</span>");
     const elapsed = ((Date.now() - start) / 1000).toFixed(2);
