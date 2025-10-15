@@ -10,40 +10,59 @@ export default async function handler(req, res) {
   const start = Date.now();
 
   try {
-    const query = `
-      query CheckLive($url: String!) {
-        goto(url: $url, waitUntil: networkidle2) { status }
-        waitForSelector(selector: "span.css-1marbt0-5e6d46e3--SpanLiveBadge, span:contains('LIVE')", timeout: 15000) {
-          node {
-            innerText
-          }
-        }
-        content
-      }
-    `;
-
-    const response = await fetch(`${endpoint}?token=${token}`, {
+    // mở tab và load trang
+    const open = await fetch(`${endpoint}?token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, variables: { url: targetUrl } }),
+      body: JSON.stringify({
+        query: `
+          mutation Open($url: String!) {
+            goto(url: $url, waitUntil: networkidle2) { status }
+          }`,
+        variables: { url: targetUrl },
+      }),
     });
 
-    const data = await response.json();
-    const html = data?.data?.content || "";
-    const liveText = data?.data?.waitForSelector?.node?.innerText || "";
-    const isLive = /LIVE/i.test(liveText) || html.includes("LIVE</span>");
-    const elapsed = ((Date.now() - start) / 1000).toFixed(2);
+    await open.json();
 
+    let isLive = false;
+    let htmlSnippet = "";
+    let elapsed = 0;
+    const timeout = 30000; // 30s tối đa
+
+    while (elapsed < timeout && !isLive) {
+      const resp = await fetch(`${endpoint}?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: `
+            query GetHTML { content } 
+          `,
+        }),
+      });
+
+      const data = await resp.json();
+      const html = data?.data?.content || "";
+      if (html.includes("SpanLiveBadge") || html.includes(">LIVE<")) {
+        isLive = true;
+        htmlSnippet = html.match(/.{0,100}LIVE.{0,100}/)?.[0] || "LIVE found";
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 2000)); // đợi 2s rồi quét lại
+      elapsed = Date.now() - start;
+    }
+
+    const checkedIn = ((Date.now() - start) / 1000).toFixed(2);
     res.json({
       user,
       is_live: isLive,
-      html_checked: isLive ? "LIVE badge found" : "Not found",
-      checked_in: `${elapsed}s`,
+      html_checked: isLive ? htmlSnippet : "Not found",
+      checked_in: `${checkedIn}s`,
       checked_at: new Date().toISOString(),
     });
   } catch (err) {
     res.status(500).json({
-      error: "BrowserQL request failed",
+      error: "Browserless request failed",
       details: err.message,
     });
   }
