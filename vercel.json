@@ -3,9 +3,6 @@
   "builds": [
     { "src": "src/*.ts", "use": "@vercel/node" }
   ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "src/$1.ts" }
-  ],
   "functions": {
     "src/getkey.ts": {
       "memory": 1024,
