@@ -1,29 +1,47 @@
-import chromium from "chrome-aws-lambda"; // tối ưu cho serverless
-import puppeteer from "puppeteer-core";
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import chromium from 'chrome-aws-lambda';
+import puppeteer from 'puppeteer-core';
 
-export default async function handler(req, res) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const { url } = req.query;
+
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'Missing URL parameter' });
+  }
+
+  let browser: puppeteer.Browser | null = null;
+
   try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ error: "Missing URL" });
+    const execPath = await chromium.executablePath || undefined;
+    console.log('Chromium executable path:', execPath || 'using default puppeteer');
 
-    const browser = await puppeteer.launch({
+    browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: true,
+      executablePath: execPath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2" });
+    // Giảm timeout, load nhanh trang đơn giản
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
 
-    // Lấy nội dung key
-    const key = await page.$eval("#keyText", el => el.textContent.trim());
+    // Lấy nội dung #keyText
+    const key = await page.$eval('#keyText', el => el.textContent?.trim() || '');
 
-    await browser.close();
+    if (!key) {
+      return res.status(404).json({ error: 'Key not found in page' });
+    }
 
     res.status(200).json({ key });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to get key" });
+    console.error('Error in getkey.ts:', err);
+    res.status(500).json({ error: 'Failed to get key', detail: (err as Error).message });
+  } finally {
+    if (browser) {
+      try { await browser.close(); } catch {}
+    }
   }
 }
